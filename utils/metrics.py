@@ -42,7 +42,9 @@ def fast_confusion(true, pred, label_values=None):
     """
 
     # Ensure data is in the right format
+    print("Before ", true.shape)
     true = np.squeeze(true)
+    print("After ", true.shape)
     pred = np.squeeze(pred)
     if len(true.shape) != 1:
         raise ValueError('Truth values are stored in a {:d}D array instead of 1D array'. format(len(true.shape)))
@@ -219,12 +221,12 @@ def IoU_from_confusions(confusions):
     # Compute IoU
     IoU = TP / (TP_plus_FP + TP_plus_FN - TP + 1e-6)
 
-    # Compute mIoU with only the actual classes
-    mask = TP_plus_FN < 1e-3
-    counts = np.sum(1 - mask, axis=-1, keepdims=True)
-    mIoU = np.sum(IoU, axis=-1, keepdims=True) / (counts + 1e-6)
+    # # Compute mIoU with only the actual classes
+    # mask = TP_plus_FN < 1e-3
+    # counts = np.sum(1 - mask, axis=-1, keepdims=True)
+    # mIoU = np.sum(IoU, axis=-1, keepdims=True) / (counts + 1e-6)
 
-    # If class is absent, place mIoU in place of 0 IoU to get the actual mean later
-    IoU += mask * mIoU
+    # # If class is absent, place mIoU in place of 0 IoU to get the actual mean later
+    # IoU += mask * mIoU
 
     return IoU

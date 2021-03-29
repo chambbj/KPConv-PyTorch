@@ -173,7 +173,7 @@ class ModelTester:
 
         return
 
-    def cloud_segmentation_test(self, net, test_loader, config, num_votes=100, debug=False):
+    def cloud_segmentation_test(self, net, test_loader, config, num_votes=10, debug=False):
         """
         Test method for cloud segmentation models
         """
@@ -192,6 +192,9 @@ class ModelTester:
 
         # Number of classes predicted by the model
         nc_model = config.num_classes
+
+        print("Expected class #'s ", nc_tot, nc_model)
+        print(test_loader.dataset.input_labels)
 
         # Initiate global prediction over test clouds
         self.test_probs = [np.zeros((l.shape[0], nc_model)) for l in test_loader.dataset.input_labels]
@@ -321,12 +324,21 @@ class ModelTester:
                         for l_ind, label_value in enumerate(test_loader.dataset.label_values):
                             if label_value in test_loader.dataset.ignored_labels:
                                 probs = np.insert(probs, l_ind, 0, axis=1)
+                        print(probs.shape)
+                        print(probs[0])
+                        print(np.argmax(probs,axis=1)[0])
+                        print(test_loader.dataset.label_values)
 
                         # Predicted labels
                         preds = test_loader.dataset.label_values[np.argmax(probs, axis=1)].astype(np.int32)
 
                         # Targets
-                        targets = test_loader.dataset.input_labels[i]
+                        targets = test_loader.dataset.input_labels[i].astype(np.int32)
+
+                        print(np.unique(preds))
+                        print(preds[0])
+                        print(np.unique(targets))
+                        print(targets)
 
                         # Confs
                         Confs += [fast_confusion(targets, preds, test_loader.dataset.label_values)]
@@ -388,7 +400,7 @@ class ModelTester:
                             preds = test_loader.dataset.label_values[np.argmax(proj_probs[i], axis=1)].astype(np.int32)
 
                             # Confusion
-                            targets = test_loader.dataset.validation_labels[i]
+                            targets = test_loader.dataset.validation_labels[i].astype(np.int32)
                             Confs += [fast_confusion(targets, preds, test_loader.dataset.label_values)]
 
                         t2 = time.time()
