@@ -42,9 +42,9 @@ def fast_confusion(true, pred, label_values=None):
     """
 
     # Ensure data is in the right format
-    print("Before ", true.shape)
+    # print("Before ", true.shape)
     true = np.squeeze(true)
-    print("After ", true.shape)
+    # print("After ", true.shape)
     pred = np.squeeze(pred)
     if len(true.shape) != 1:
         raise ValueError('Truth values are stored in a {:d}D array instead of 1D array'. format(len(true.shape)))

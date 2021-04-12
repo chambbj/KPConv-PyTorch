@@ -96,9 +96,9 @@ if __name__ == '__main__':
     #       > 'last_XXX': Automatically retrieve the last trained model on dataset XXX
     #       > '(old_)results/Log_YYYY-MM-DD_HH-MM-SS': Directly provide the path of a trained model
 
-    chosen_log = 'results/Log_2021-03-26_18-16-17'  # => ModelNet40
+    chosen_log = 'results/Log_2021-04-09_16-01-23'  # => ModelNet40
 
-    # Choose the index of the checkpoint to load OR None if you want to load the current checkpoint
+    # Choose the index of the checkpoint to load OR None if you want to load the best checkpoint
     chkp_idx = None
 
     # Choose to test on validation or test split
@@ -127,7 +127,7 @@ if __name__ == '__main__':
 
     # Find which snapshot to restore
     if chkp_idx is None:
-        chosen_chkp = 'current_chkp.tar'
+        chosen_chkp = 'best_acc_chkp.tar'
     else:
         chosen_chkp = np.sort(chkps)[chkp_idx]
     chosen_chkp = os.path.join(chosen_log, 'checkpoints', chosen_chkp)
@@ -176,7 +176,7 @@ if __name__ == '__main__':
         test_sampler = SemanticKittiSampler(test_dataset)
         collate_fn = SemanticKittiCollate
     elif config.dataset == 'US3D':
-        test_dataset = US3DDataset(config, set='validation', use_potentials=True)
+        test_dataset = US3DDataset(config, set='test', use_potentials=True)
         test_sampler = US3DSampler(test_dataset)
         collate_fn = US3DCollate
     else:
@@ -206,7 +206,7 @@ if __name__ == '__main__':
         raise ValueError('Unsupported dataset_task for testing: ' + config.dataset_task)
 
     # Define a visualizer class
-    tester = ModelTester(net, chkp_path=chosen_chkp)
+    tester = ModelTester(net, chkp_path=chosen_chkp, on_gpu=True)
     print('Done in {:.1f}s\n'.format(time.time() - t1))
 
     print('\nStart test')

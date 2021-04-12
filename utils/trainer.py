@@ -37,12 +37,17 @@ import sys
 from utils.ply import read_ply, write_ply
 
 # Metrics
-from utils.metrics import IoU_from_confusions, fast_confusion
+from utils.metrics import IoU_from_confusions, fast_confusion, metrics
 from utils.config import Config
 from sklearn.neighbors import KDTree
 
+# from torch.utils.tensorboard import SummaryWriter
+
 from models.blocks import KPConv
 
+
+best_acc = 0.0
+best_miou = 0.0
 
 # ----------------------------------------------------------------------------------------------------------------------
 #
@@ -130,6 +135,10 @@ class ModelTrainer:
         ################
         # Initialization
         ################
+
+        # writer = SummaryWriter('runs/LPSVE-2m-none-ignored')
+
+        # writer.add_graph(net)
 
         if config.saving:
             # Training log file
@@ -230,6 +239,12 @@ class ModelTrainer:
                                                   acc,
                                                   t[-1] - t0))
 
+                # Write to tensorboard here...
+                if (self.epoch * len(training_loader) + self.step) % 9 == 0:
+                    config.writer.add_scalar('training_loss', loss.item(), (self.epoch * len(training_loader) + self.step)/config.epoch_steps)
+                    config.writer.add_scalar('training_output_loss', net.output_loss, (self.epoch * len(training_loader) + self.step)/config.epoch_steps)
+                    config.writer.add_scalar('training_reg_loss', net.reg_loss, (self.epoch * len(training_loader) + self.step)/config.epoch_steps)
+                    config.writer.add_scalar('training_acc', acc, (self.epoch * len(training_loader) + self.step)/config.epoch_steps)
 
                 self.step += 1
 
@@ -272,6 +287,7 @@ class ModelTrainer:
             net.train()
 
         print('Finished Training')
+        config.writer.close()
         return
 
     # Validation methods
@@ -415,6 +431,8 @@ class ModelTrainer:
         Validation method for cloud segmentation models
         """
 
+        global best_acc, best_miou
+
         ############
         # Initialize
         ############
@@ -530,10 +548,12 @@ class ModelTrainer:
                     probs = np.insert(probs, l_ind, 0, axis=1)
 
             # Predicted labels
-            preds = val_loader.dataset.label_values[np.argmax(probs, axis=1)]
+            preds = np.array([val_loader.dataset.label_to_idx[l] for l in val_loader.dataset.label_values[np.argmax(probs, axis=1)]])
+            # preds = val_loader.dataset.label_values[np.argmax(probs, axis=1)]
 
             # Confusions
-            Confs[i, :, :] = fast_confusion(truth, preds, val_loader.dataset.label_values).astype(np.int32)
+            # Confs[i, :, :] = fast_confusion(truth, preds, val_loader.dataset.label_values).astype(np.int32)
+            Confs[i, :, :] = fast_confusion(truth, preds, np.array([0,1,2,3,4,5])).astype(np.int32)
 
 
         t3 = time.time()
@@ -579,24 +599,74 @@ class ModelTrainer:
                     text_file.write(line)
 
             # Save potentials
-            pot_path = join(config.saving_path, 'potentials')
-            if not exists(pot_path):
-                makedirs(pot_path)
-            files = val_loader.dataset.files
-            for i, file_path in enumerate(files):
-                pot_points = np.array(val_loader.dataset.pot_trees[i].data, copy=False)
-                cloud_name = file_path.split('/')[-1]
-                pot_name = join(pot_path, cloud_name)
-                pots = val_loader.dataset.potentials[i].numpy().astype(np.float32)
-                write_ply(pot_name,
-                          [pot_points.astype(np.float32), pots],
-                          ['x', 'y', 'z', 'pots'])
+            if val_loader.dataset.use_potentials:
+                pot_path = join(config.saving_path, 'potentials')
+                if not exists(pot_path):
+                    makedirs(pot_path)
+                files = val_loader.dataset.files
+                for i, file_path in enumerate(files):
+                    pot_points = np.array(val_loader.dataset.pot_trees[i].data, copy=False)
+                    cloud_name = file_path.split('/')[-1]
+                    pot_name = join(pot_path, cloud_name)
+                    pots = val_loader.dataset.potentials[i].numpy().astype(np.float32)
+                    write_ply(pot_name,
+                            [pot_points.astype(np.float32), pots],
+                            ['x', 'y', 'z', 'pots'])
 
         t6 = time.time()
 
         # Print instance mean
         mIoU = 100 * np.mean(IoUs)
         print('{:s} mean IoU = {:.1f}%'.format(config.dataset, mIoU))
+
+        config.writer.add_scalar('validation_miou', np.mean(IoUs), self.epoch)
+        # for iou_idx, iou in enumerate(IoUs):
+        #     config.writer.add_scalar('validation_iou_{}'.format(iou_idx), iou, self.epoch)
+
+        PRE, REC, F1, IoU, ACC = metrics(C)
+        for idx, pre in enumerate(PRE):
+            config.writer.add_scalar('validation_precision_{}'.format(idx), pre, self.epoch)
+        for idx, rec in enumerate(REC):
+            config.writer.add_scalar('validation_recall_{}'.format(idx), rec, self.epoch)
+        for idx, f1 in enumerate(F1):
+            config.writer.add_scalar('validation_f1_{}'.format(idx), f1, self.epoch)
+        for idx, iou in enumerate(IoU):
+            config.writer.add_scalar('validation_iou_{}'.format(idx), iou, self.epoch)
+        config.writer.add_scalar('validation_acc', ACC, self.epoch)
+
+        print(ACC, best_acc)
+        if ACC > best_acc:
+            best_acc = ACC
+            checkpoint_directory = join(config.saving_path, 'checkpoints')
+            if not exists(checkpoint_directory):
+                makedirs(checkpoint_directory)
+
+            # Get current state dict
+            save_dict = {'epoch': self.epoch,
+                        'model_state_dict': net.state_dict(),
+                        'optimizer_state_dict': self.optimizer.state_dict(),
+                        'saving_path': config.saving_path}
+
+            # Save current state of the network (for restoring purposes)
+            checkpoint_path = join(checkpoint_directory, 'best_acc_chkp.tar')
+            torch.save(save_dict, checkpoint_path)
+
+        print(np.mean(IoUs), best_miou)
+        if np.mean(IoUs) > best_miou:
+            best_miou = np.mean(IoUs)
+            checkpoint_directory = join(config.saving_path, 'checkpoints')
+            if not exists(checkpoint_directory):
+                makedirs(checkpoint_directory)
+
+            # Get current state dict
+            save_dict = {'epoch': self.epoch,
+                        'model_state_dict': net.state_dict(),
+                        'optimizer_state_dict': self.optimizer.state_dict(),
+                        'saving_path': config.saving_path}
+
+            # Save current state of the network (for restoring purposes)
+            checkpoint_path = join(checkpoint_directory, 'best_miou_chkp.tar')
+            torch.save(save_dict, checkpoint_path)
 
         # Save predicted cloud occasionally
         if config.saving and (self.epoch + 1) % config.checkpoint_gap == 0:
@@ -622,6 +692,8 @@ class ModelTrainer:
 
                 # Reproject preds on the evaluations points
                 preds = (sub_preds[val_loader.dataset.test_proj[i]]).astype(np.int32)
+
+                # x1 = (sub_probs[:,1][val_loader.dataset.test_proj[i]]).astype(np.float32)
 
                 # Path of saved validation file
                 cloud_name = file_path.split('/')[-1]

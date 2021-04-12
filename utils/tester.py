@@ -70,7 +70,10 @@ class ModelTester:
         # Load previous checkpoint
         ##########################
 
-        checkpoint = torch.load(chkp_path)
+        if on_gpu and torch.cuda.is_available():
+            checkpoint = torch.load(chkp_path)
+        else:
+            checkpoint = torch.load(chkp_path, map_location=torch.device('cpu'))
         net.load_state_dict(checkpoint['model_state_dict'])
         self.epoch = checkpoint['epoch']
         net.eval()
@@ -173,7 +176,7 @@ class ModelTester:
 
         return
 
-    def cloud_segmentation_test(self, net, test_loader, config, num_votes=10, debug=False):
+    def cloud_segmentation_test(self, net, test_loader, config, num_votes=20, debug=False):
         """
         Test method for cloud segmentation models
         """
@@ -262,7 +265,8 @@ class ModelTester:
                 lengths = batch.lengths[0].cpu().numpy()
                 in_inds = batch.input_inds.cpu().numpy()
                 cloud_inds = batch.cloud_inds.cpu().numpy()
-                torch.cuda.synchronize(self.device)
+                if 'cuda' in self.device.type:
+                    torch.cuda.synchronize(self.device)
 
                 # Get predictions and labels per instance
                 # ***************************************
@@ -558,7 +562,8 @@ class ModelTester:
                 r_inds_list = batch.reproj_inds
                 r_mask_list = batch.reproj_masks
                 labels_list = batch.val_labels
-                torch.cuda.synchronize(self.device)
+                if 'cuda' in self.device.type:
+                    torch.cuda.synchronize(self.device)
 
                 t += [time.time()]
 

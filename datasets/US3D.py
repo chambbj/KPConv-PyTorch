@@ -45,6 +45,8 @@ from utils.mayavi_visu import *
 from datasets.common import grid_subsampling
 from utils.config import bcolors
 
+from torch.utils.tensorboard import SummaryWriter
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 #
@@ -81,6 +83,7 @@ class US3DDataset(PointCloudDataset):
 
         # Dataset folder
         self.path = '/home/chambbj/data/ml-datasets/US3D/train-single-file-prototype-kpconv'
+        # self.path = '/data/train-single-file-prototype-kpconv'
 
         # Type of task conducted on this dataset
         self.dataset_task = 'cloud_segmentation'
@@ -102,18 +105,17 @@ class US3DDataset(PointCloudDataset):
 
         # Path of the training files
         self.train_path = join(self.path, 'train')
-        self.test_path = join(self.path, 'validation')
-        # self.test_path = join(self.path, 'test')
+        # self.test_path = join(self.path, 'validation')
+        self.test_path = join(self.path, 'test')
+        # self.test_path = '/home/chambbj/data/hobu'
 
         # List of files to process
-        # ply_path = join(self.path, self.train_path)
 
         # Proportion of validation scenes
-        # self.cloud_names = ['JAX_Tile_004_PC-combined', 'JAX_Tile_199_PC-combined', 'JAX_Tile_212_PC-combined', 'JAX_Tile_370_PC-combined', 'JAX_Tile_377_PC-combined', 'OMA_Tile_047_PC-combined', 'OMA_Tile_183_PC-combined', 'OMA_Tile_366_PC-combined', 'OMA_Tile_271_PC-combined']
         self.train_files = np.sort([join(self.train_path, f) for f in listdir(self.train_path) if f[-4:] == '.laz'])
         self.test_files = np.sort([join(self.test_path, f) for f in listdir(self.test_path) if f[-4:] == '.laz'])
         self.all_splits = [i for i in range(len(self.train_files))]
-        self.validation_split = 1
+        self.validation_split = len(self.train_files)-1
 
         # Number of models used per epoch
         if self.set == 'training':
@@ -127,14 +129,8 @@ class US3DDataset(PointCloudDataset):
         # if not load_data:
         #     return
 
-        ###################
-        # Prepare ply files
-        ###################
-
-        #self.prepare_US3D_ply()
-
         ################
-        # Load ply files
+        # Load las files
         ################
 
         if self.set == 'training':
@@ -143,25 +139,6 @@ class US3DDataset(PointCloudDataset):
             self.files = self.test_files
         else:
             raise ValueError('Unknown set for US3D data: ', self.set)
-
-        # # List of training files
-        # self.files = []
-        # for i, f in enumerate(self.cloud_names):
-        #     if self.set == 'training':
-        #         if self.all_splits[i] != self.validation_split:
-        #             self.files += [join(ply_path, f + '.laz')]
-        #     elif self.set in ['validation', 'test', 'ERF']:
-        #         if self.all_splits[i] == self.validation_split:
-        #             self.files += [join(ply_path, f + '.laz')]
-        #     else:
-        #         raise ValueError('Unknown set for US3D data: ', self.set)
-
-        # if self.set == 'training':
-        #     self.cloud_names = [f for i, f in enumerate(self.cloud_names)
-        #                         if self.all_splits[i] != self.validation_split]
-        # elif self.set in ['validation', 'test', 'ERF']:
-        #     self.cloud_names = [f for i, f in enumerate(self.cloud_names)
-        #                         if self.all_splits[i] == self.validation_split]
 
         if 0 < self.config.first_subsampling_dl <= 0.01:
             raise ValueError('subsampling_parameter too low (should be over 1 cm')
@@ -214,7 +191,12 @@ class US3DDataset(PointCloudDataset):
             self.potentials = None
             self.min_potentials = None
             self.argmin_potentials = None
-            N = config.epoch_steps * config.batch_num
+            # N = config.epoch_steps * config.batch_num
+            # Number of step per epoch
+            if set == 'training':
+                N = config.epoch_steps * config.batch_num
+            else:
+                N = config.validation_size * config.batch_num
             self.epoch_inds = torch.from_numpy(np.zeros((2, N), dtype=np.int64))
             self.epoch_i = torch.from_numpy(np.zeros((1,), dtype=np.int64))
             self.epoch_i.share_memory_()
@@ -227,6 +209,8 @@ class US3DDataset(PointCloudDataset):
             self.batch_limit = torch.tensor([1], dtype=torch.float32)
             self.batch_limit.share_memory_()
             np.random.seed(42)
+
+        self.config.writer = SummaryWriter('runs/LPSV-0.8m-20m-lr_1e-2-batch_8-knn_45')
 
         return
 
@@ -361,6 +345,7 @@ class US3DDataset(PointCloudDataset):
             else:
                 input_labels = self.input_labels[cloud_ind][input_inds]
                 # print(np.unique(input_labels))
+                # print(self.label_to_idx)
                 input_labels = np.array([self.label_to_idx[l] for l in input_labels])
 
             t += [time.time()]
@@ -425,7 +410,7 @@ class US3DDataset(PointCloudDataset):
         elif self.config.in_features_dim == 4:
             stacked_features = np.hstack((stacked_features, features[:, :3]))
         elif self.config.in_features_dim == 5:
-            stacked_features = np.hstack((stacked_features, features))
+            stacked_features = np.hstack((stacked_features, features[:, :4]))
         else:
             raise ValueError('Only accepted input dimensions are 1, 4 and 7 (without and with XYZ)')
 
@@ -622,7 +607,7 @@ class US3DDataset(PointCloudDataset):
         elif self.config.in_features_dim == 4:
             stacked_features = np.hstack((stacked_features, features[:, :3]))
         elif self.config.in_features_dim == 5:
-            stacked_features = np.hstack((stacked_features, features))
+            stacked_features = np.hstack((stacked_features, features[:, :4]))
         else:
             raise ValueError('Only accepted input dimensions are 1, 4 and 7 (without and with XYZ)')
 
@@ -643,80 +628,6 @@ class US3DDataset(PointCloudDataset):
         input_list += [scales, rots, cloud_inds, point_inds, input_inds]
 
         return input_list
-
-    def prepare_US3D_ply(self):
-
-        print('\nPreparing ply files')
-        t0 = time.time()
-
-        # Folder for the ply files
-        ply_path = join(self.path, self.train_path)
-        if not exists(ply_path):
-            makedirs(ply_path)
-
-        for cloud_name in self.cloud_names:
-
-            # Pass if the cloud has already been computed
-            cloud_file = join(ply_path, cloud_name + '.ply')
-            if exists(cloud_file):
-                continue
-
-            # Get rooms of the current cloud
-            cloud_folder = join(self.path, cloud_name)
-            room_folders = [join(cloud_folder, room) for room in listdir(cloud_folder) if isdir(join(cloud_folder, room))]
-
-            # Initiate containers
-            cloud_points = np.empty((0, 3), dtype=np.float32)
-            cloud_features = np.empty((0, 2), dtype=np.uint8)
-            cloud_classes = np.empty((0, 1), dtype=np.int32)
-
-            # Loop over rooms
-            for i, room_folder in enumerate(room_folders):
-
-                print('Cloud %s - Room %d/%d : %s' % (cloud_name, i+1, len(room_folders), room_folder.split('/')[-1]))
-
-                for object_name in listdir(join(room_folder, 'Annotations')):
-
-                    if object_name[-4:] == '.txt':
-
-                        # Text file containing point of the object
-                        object_file = join(room_folder, 'Annotations', object_name)
-
-                        # Object class and ID
-                        tmp = object_name[:-4].split('_')[0]
-                        if tmp in self.name_to_label:
-                            object_class = self.name_to_label[tmp]
-                        elif tmp in ['stairs']:
-                            object_class = self.name_to_label['clutter']
-                        else:
-                            raise ValueError('Unknown object name: ' + str(tmp))
-
-                        # Correct bug in US3D dataset
-                        if object_name == 'ceiling_1.txt':
-                            with open(object_file, 'r') as f:
-                                lines = f.readlines()
-                            for l_i, line in enumerate(lines):
-                                if '103.0\x100000' in line:
-                                    lines[l_i] = line.replace('103.0\x100000', '103.000000')
-                            with open(object_file, 'w') as f:
-                                f.writelines(lines)
-
-                        # Read object points and colors
-                        object_data = np.loadtxt(object_file, dtype=np.float32)
-
-                        # Stack all data
-                        cloud_points = np.vstack((cloud_points, object_data[:, 0:3].astype(np.float32)))
-                        cloud_features = np.vstack((cloud_features, object_data[:, 3:5].astype(np.uint8)))
-                        object_classes = np.full((object_data.shape[0], 1), object_class, dtype=np.int32)
-                        cloud_classes = np.vstack((cloud_classes, object_classes))
-
-            # Save as ply
-            write_ply(cloud_file,
-                      (cloud_points, cloud_features, cloud_classes),
-                      ['x', 'y', 'z', 'intensity', 'returnnumber', 'class'])
-
-        print('Done in {:.1f}s'.format(time.time() - t0))
-        return
 
     def load_subsampled_clouds(self):
 
@@ -743,7 +654,7 @@ class US3DDataset(PointCloudDataset):
 
             # Name of the input files
             KDTree_file = join(tree_path, '{:s}_KDTree.pkl'.format(cloud_name))
-            sub_las_file = join(tree_path, '{:s}.las'.format(cloud_name))
+            sub_las_file = join(tree_path, '{:s}.laz'.format(cloud_name))
 
             # Check if inputs have already been computed
             if exists(KDTree_file):
@@ -751,15 +662,15 @@ class US3DDataset(PointCloudDataset):
 
                 # read ply with data
                 #data = read_ply(sub_ply_file)
-                data = read_las(sub_las_file)
+                _, sub_features, sub_labels = read_processed_las(sub_las_file)
                 #sub_features = np.vstack((data['red'], data['green'], data['blue'])).T
-                intensity = np.expand_dims(data['Intensity'], 1).astype(np.float32)
-                intensity = np.minimum(intensity, 255.0)/255.0
-                sub_features = intensity
+                # intensity = np.expand_dims(data['Intensity'], 1).astype(np.float32)
+                # intensity = np.minimum(intensity, 255.0)/255.0
+                # sub_features = intensity
                 # returnnumber = np.expand_dims(data['ReturnNumber'], 1).astype(np.float32)
                 # returnnumber = np.minimum(returnnumber, 4.0)/4.0
                 # sub_features = np.hstack((intensity, returnnumber))
-                sub_labels = data['Classification']
+                # sub_labels = data['Classification']
 
                 # Read pkl with search tree
                 with open(KDTree_file, 'rb') as f:
@@ -770,23 +681,23 @@ class US3DDataset(PointCloudDataset):
 
                 # Read ply file
                 #data = read_ply(file_path)
-                data = read_las(file_path)
-                points = np.vstack((data['X'], data['Y'], data['Z'])).T
+                points, features, labels = read_raw_las(file_path)
+                # points = np.vstack((data['X'], data['Y'], data['Z'])).T
                 #features = np.vstack((data['red'], data['green'], data['blue'])).T
-                intensity = np.expand_dims(data['Intensity'], 1).astype(np.float32)
-                intensity = np.minimum(intensity, 255.0)/255.0
-                features = intensity
+                # intensity = np.expand_dims(data['Intensity'], 1).astype(np.float32)
+                # intensity = np.minimum(intensity, 255.0)/255.0
+                # features = intensity
                 # returnnumber = np.expand_dims(data['ReturnNumber'], 1).astype(np.float32)
                 # returnnumber = np.minimum(returnnumber, 4.0)/4.0
                 # features = np.hstack((intensity, returnnumber))
-                labels = data['Classification']
+                # labels = data['Classification']
 
                 # Subsample cloud
                 # sub_points, sub_labels = grid_subsampling(points.astype('float32'),
                 #                                           labels=labels,
                 #                                           sampleDl=dl)
                 sub_points, sub_features, sub_labels = grid_subsampling(points.astype('float32'),
-                                                                        features=features,
+                                                                        features=features.astype('float32'),
                                                                         labels=labels,
                                                                         sampleDl=dl)
 
@@ -808,8 +719,10 @@ class US3DDataset(PointCloudDataset):
                 #write_ply(sub_ply_file,
                 #          [sub_points, sub_features, sub_labels],
                 #          ['x', 'y', 'z', 'red', 'green', 'blue', 'class'])
-                # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Intensity,ReturnNumberClassification',formats='f8,f8,f8,u8,u1,u1')
-                foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_labels.T)),names='X,Y,Z,Classification',formats='f8,f8,f8,u1')
+                # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Intensity,Classification',formats='f8,f8,f8,u8,u1')
+                foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Linearity,Planarity,Scattering,Verticality,Classification',formats='f8,f8,f8,f8,f8,f8,f8,u1')
+                # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_labels.T)),names='X,Y,Z,Classification',formats='f8,f8,f8,u1')
+                # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_labels.T)),names='X,Y,Z,Classification',formats='f8,f8,f8,u1')
                 write_las(sub_las_file, foo)
 
             # Fill data containers
@@ -897,9 +810,9 @@ class US3DDataset(PointCloudDataset):
                     with open(proj_file, 'rb') as f:
                         proj_inds, labels = pickle.load(f)
                 else:
-                    data = read_las(file_path)
-                    points = np.vstack((data['X'], data['Y'], data['Z'])).T
-                    labels = data['Classification']
+                    points, _, labels = read_raw_las(file_path)
+                    # points = np.vstack((data['X'], data['Y'], data['Z'])).T
+                    # labels = data['Classification']
 
                     # Compute projection inds
                     idxs = self.input_trees[i].query(points, return_distance=False)
@@ -923,8 +836,8 @@ class US3DDataset(PointCloudDataset):
         """
 
         # Get original points
-        data = read_las(file_path)
-        return np.vstack((data['X'], data['Y'], data['Z'])).T
+        points, _, _ = read_raw_las(file_path)
+        return points #np.vstack((data['X'], data['Y'], data['Z'])).T
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -967,8 +880,25 @@ class US3DSampler(Sampler):
 
             # Number of sphere centers taken per class in each cloud
             num_centers = self.N * self.dataset.config.batch_num
-            random_pick_n = int(np.ceil(num_centers / (self.dataset.num_clouds * self.dataset.config.num_classes)))
-            print(num_centers, self.dataset.num_clouds, self.dataset.config.num_classes, random_pick_n)
+            # random_pick_n = int(np.ceil(num_centers / (self.dataset.num_clouds * self.dataset.config.num_classes)))
+            # print(num_centers, self.dataset.num_clouds, self.dataset.config.num_classes, random_pick_n)
+
+            # Make a first pass through all clouds to see which ones have each label and then figure out where to sample the classes
+            random_pick_n = np.zeros_like(self.dataset.label_values)
+            num_clouds_per_label = np.zeros_like(self.dataset.label_values)
+            for cloud_ind, cloud_labels in enumerate(self.dataset.input_labels):
+                for label_ind, label in enumerate(self.dataset.label_values):
+                    if label not in self.dataset.ignored_labels:
+                        label_indices = np.where(np.equal(cloud_labels, label))[0]
+                        if len(label_indices)==0:
+                            continue
+                        num_clouds_per_label[label_ind]+=1
+            for label_ind, label in enumerate(self.dataset.label_values):
+                if label not in self.dataset.ignored_labels:
+                    random_pick_n[label_ind] = int(np.ceil(num_centers/(num_clouds_per_label[label_ind]*self.dataset.config.num_classes)))
+
+            print(num_clouds_per_label)
+            print(random_pick_n)
 
             # Choose random points of each class for each cloud
             for cloud_ind, cloud_labels in enumerate(self.dataset.input_labels):
@@ -976,16 +906,18 @@ class US3DSampler(Sampler):
                 for label_ind, label in enumerate(self.dataset.label_values):
                     if label not in self.dataset.ignored_labels:
                         label_indices = np.where(np.equal(cloud_labels, label))[0]
-                        if len(label_indices) <= random_pick_n:
+                        if (len(label_indices)==0):
+                            continue
+                        if len(label_indices) <= random_pick_n[label_ind]:
                             epoch_indices = np.hstack((epoch_indices, label_indices))
-                        elif len(label_indices) < 50 * random_pick_n:
-                            new_randoms = np.random.choice(label_indices, size=random_pick_n, replace=False)
+                        elif len(label_indices) < 50 * random_pick_n[label_ind]:
+                            new_randoms = np.random.choice(label_indices, size=random_pick_n[label_ind], replace=False)
                             epoch_indices = np.hstack((epoch_indices, new_randoms.astype(np.int32)))
                         else:
                             rand_inds = []
-                            while len(rand_inds) < random_pick_n:
-                                rand_inds = np.unique(np.random.choice(label_indices, size=5 * random_pick_n, replace=True))
-                            epoch_indices = np.hstack((epoch_indices, rand_inds[:random_pick_n].astype(np.int32)))
+                            while len(rand_inds) < random_pick_n[label_ind]:
+                                rand_inds = np.unique(np.random.choice(label_indices, size=5 * random_pick_n[label_ind], replace=True))
+                            epoch_indices = np.hstack((epoch_indices, rand_inds[:random_pick_n[label_ind]].astype(np.int32)))
 
                 # Stack those indices with the cloud index
                 epoch_indices = np.vstack((np.full(epoch_indices.shape, cloud_ind, dtype=np.int32), epoch_indices))
@@ -1662,23 +1594,55 @@ def debug_batch_and_neighbors_calib(dataset, loader):
     _, counts = np.unique(dataset.input_labels, return_counts=True)
     print(counts)
 
-def read_las(filename):
+def read_processed_las(filename):
     p = pdal.Pipeline(json.dumps([filename]))
     p.validate()
     p.execute()
-    return p.arrays[0]
+    data = p.arrays[0]
+    points = np.vstack((data['X'], data['Y'], data['Z'])).T
+    # intensity = np.expand_dims(data['Intensity'], 1).astype(np.float32)
+    # intensity = np.minimum(intensity, 255.0)/255.0
+    # features = intensity
+    features = np.vstack((data['Linearity'],data['Planarity'],data['Scattering'],data['Verticality'])).T
+    # features = np.vstack((data['X'], data['Y'], data['Z'])).T
+    labels = data['Classification']
+    return points, features, labels
+
+def read_raw_las(filename):
+    p = pdal.Pipeline(json.dumps([
+        # filename
+        filename,
+        {
+            "type":"filters.covariancefeatures",
+            "knn":45
+        }
+    ]))
+    p.validate()
+    p.execute()
+    data = p.arrays[0]
+    points = np.vstack((data['X'], data['Y'], data['Z'])).T
+    # intensity = np.expand_dims(data['Intensity'], 1).astype(np.float32)
+    # intensity = np.minimum(intensity, 255.0)/255.0
+    # features = intensity
+    features = np.vstack((data['Linearity'],data['Planarity'],data['Scattering'],data['Verticality'])).T
+    # features = np.vstack((data['X'], data['Y'], data['Z'])).T
+    labels = data['Classification']
+    return points, features, labels
 
 def write_las(filename, array):
     # merge the fields then
     p = pdal.Pipeline(json.dumps([{
         "type":"writers.las",
         "filename":filename,
-        "offset_x":"auto",
-        "offset_y":"auto",
-        "offset_z":"auto",
-        "scale_x":0.01,
-        "scale_y":0.01,
-        "scale_z":0.01
+        # "offset_x":"auto",
+        # "offset_y":"auto",
+        # "offset_z":"auto",
+        # "scale_x":0.01,
+        # "scale_y":0.01,
+        # "scale_z":0.01
+        "forward":"all",
+        "minor_version":4,
+        "extra_dims":"all"
         }]), [array])
     p.validate()
     p.execute()
