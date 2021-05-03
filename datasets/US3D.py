@@ -29,8 +29,6 @@ import pickle
 import torch
 import math
 from multiprocessing import Lock
-import json
-import pdal
 
 
 # OS functions
@@ -44,6 +42,7 @@ from utils.mayavi_visu import *
 
 from datasets.common import grid_subsampling
 from utils.config import bcolors
+from utils.las import read_processed_las, read_raw_las, write_las
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -68,21 +67,41 @@ class US3DDataset(PointCloudDataset):
         ############
 
         # Dict from labels to names
+        # self.label_to_names = {0: 'unlabeled',
+        #                        2: 'ground',
+        #                        5: 'vegetation',
+        #                        6: 'building',
+        #                        9: 'water',
+        #                        17: 'bridge'}
+
         self.label_to_names = {0: 'unlabeled',
-                               2: 'ground',
+                               1: 'ground',
+                               2: 'noise',
+                               3: 'water',
+                               4: 'bridge',
                                5: 'vegetation',
-                               6: 'building',
-                               9: 'water',
-                               17: 'bridge'}
+                               6: 'building'}
+
+        # self.label_to_names = {0: 'unlabeled',
+        #                        1: 'car',
+        #                        2: 'ground',
+        #                        3: 'truck',
+        #                        4: 'rail',
+        #                        5: 'vegetation',
+        #                        6: 'building',
+        #                        7: 'road',
+        #                        8: 'utility',
+        #                        9: 'water'}
 
         # Initialize a bunch of variables concerning class labels
         self.init_labels()
 
         # List of classes ignored during training (can be empty)
-        self.ignored_labels = np.array([0])
+        self.ignored_labels = np.array([2,5,6])
 
         # Dataset folder
-        self.path = '/home/chambbj/data/ml-datasets/US3D/train-single-file-prototype-kpconv'
+        # self.path = '/home/chambbj/data/ml-datasets/US3D/train-single-file-prototype-kpconv'
+        self.path = '/home/chambbj/data/southerniowa'
         # self.path = '/data/train-single-file-prototype-kpconv'
 
         # Type of task conducted on this dataset
@@ -105,8 +124,9 @@ class US3DDataset(PointCloudDataset):
 
         # Path of the training files
         self.train_path = join(self.path, 'train')
-        # self.test_path = join(self.path, 'validation')
-        self.test_path = join(self.path, 'test')
+        self.test_path = join(self.path, 'validation')
+        # self.test_path = join(self.path, 'test')
+        self.test_path = join(self.path, 'predict')
         # self.test_path = '/home/chambbj/data/hobu'
 
         # List of files to process
@@ -210,7 +230,7 @@ class US3DDataset(PointCloudDataset):
             self.batch_limit.share_memory_()
             np.random.seed(42)
 
-        self.config.writer = SummaryWriter('runs/LPSV-0.8m-20m-lr_1e-2-batch_8-knn_45')
+        self.config.writer = SummaryWriter('runs/southerniowa-eigs-original-classes-v1')
 
         return
 
@@ -358,14 +378,14 @@ class US3DDataset(PointCloudDataset):
                input_features *= 0
 
             # Get original height as additional feature
-            input_features = np.hstack((input_features, input_points[:, 2:] + center_point[:, 2:])).astype(np.float32)
+            # input_features = np.hstack((input_features, input_points[:, 2:] + center_point[:, 2:])).astype(np.float32)
             # input_features = np.hstack((input_points[:, 2:] + center_point[:, 2:])).astype(np.float32)
 
             t += [time.time()]
 
             # Stack batch
             p_list += [input_points]
-            f_list += [input_features]
+            f_list += [input_features.astype(np.float32)]
             l_list += [input_labels]
             pi_list += [input_inds]
             i_list += [point_ind]
@@ -403,16 +423,18 @@ class US3DDataset(PointCloudDataset):
         stacked_features = np.ones_like(stacked_points[:, :1], dtype=np.float32)
         if self.config.in_features_dim == 1:
             pass
-        elif self.config.in_features_dim == 2:
-            stacked_features = np.hstack((stacked_features, features[:, :1]))
-        elif self.config.in_features_dim == 3:
-            stacked_features = np.hstack((stacked_features, features[:, :2]))
-        elif self.config.in_features_dim == 4:
-            stacked_features = np.hstack((stacked_features, features[:, :3]))
-        elif self.config.in_features_dim == 5:
-            stacked_features = np.hstack((stacked_features, features[:, :4]))
         else:
-            raise ValueError('Only accepted input dimensions are 1, 4 and 7 (without and with XYZ)')
+            stacked_features = np.hstack((stacked_features, features))
+        # elif self.config.in_features_dim == 2:
+        #     stacked_features = np.hstack((stacked_features, features[:, :1]))
+        # elif self.config.in_features_dim == 3:
+        #     stacked_features = np.hstack((stacked_features, features[:, :2]))
+        # elif self.config.in_features_dim == 4:
+        #     stacked_features = np.hstack((stacked_features, features[:, :3]))
+        # elif self.config.in_features_dim == 5:
+        #     stacked_features = np.hstack((stacked_features, features[:, :4]))
+        # else:
+        #     raise ValueError('Only accepted input dimensions are 1, 4 and 7 (without and with XYZ)')
 
         #######################
         # Create network inputs
@@ -557,12 +579,12 @@ class US3DDataset(PointCloudDataset):
                input_features *= 0
 
             # Get original height as additional feature
-            input_features = np.hstack((input_features, input_points[:, 2:] + center_point[:, 2:])).astype(np.float32)
+            # input_features = np.hstack((input_features, input_points[:, 2:] + center_point[:, 2:])).astype(np.float32)
             # input_features = np.hstack((input_points[:, 2:] + center_point[:, 2:])).astype(np.float32)
 
             # Stack batch
             p_list += [input_points]
-            f_list += [input_features]
+            f_list += [input_features.astype(np.float32)]
             l_list += [input_labels]
             pi_list += [input_inds]
             i_list += [point_ind]
@@ -600,16 +622,18 @@ class US3DDataset(PointCloudDataset):
         stacked_features = np.ones_like(stacked_points[:, :1], dtype=np.float32)
         if self.config.in_features_dim == 1:
             pass
-        elif self.config.in_features_dim == 2:
-            stacked_features = np.hstack((stacked_features, features[:, :1]))
-        elif self.config.in_features_dim == 3:
-            stacked_features = np.hstack((stacked_features, features[:, :2]))
-        elif self.config.in_features_dim == 4:
-            stacked_features = np.hstack((stacked_features, features[:, :3]))
-        elif self.config.in_features_dim == 5:
-            stacked_features = np.hstack((stacked_features, features[:, :4]))
         else:
-            raise ValueError('Only accepted input dimensions are 1, 4 and 7 (without and with XYZ)')
+            stacked_features = np.hstack((stacked_features, features))
+        # elif self.config.in_features_dim == 2:
+        #     stacked_features = np.hstack((stacked_features, features[:, :1]))
+        # elif self.config.in_features_dim == 3:
+        #     stacked_features = np.hstack((stacked_features, features[:, :2]))
+        # elif self.config.in_features_dim == 4:
+        #     stacked_features = np.hstack((stacked_features, features[:, :3]))
+        # elif self.config.in_features_dim == 5:
+        #     stacked_features = np.hstack((stacked_features, features[:, :4]))
+        # else:
+        #     raise ValueError('Only accepted input dimensions are 1, 4 and 7 (without and with XYZ)')
 
         #######################
         # Create network inputs
@@ -720,7 +744,8 @@ class US3DDataset(PointCloudDataset):
                 #          [sub_points, sub_features, sub_labels],
                 #          ['x', 'y', 'z', 'red', 'green', 'blue', 'class'])
                 # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Intensity,Classification',formats='f8,f8,f8,u8,u1')
-                foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Linearity,Planarity,Scattering,Verticality,Classification',formats='f8,f8,f8,f8,f8,f8,f8,u1')
+                # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Linearity,Planarity,Scattering,Verticality,ReturnNumber,NumberOfReturns,Classification',formats='f8,f8,f8,f8,f8,f8,f8,f8,f8,u1')
+                foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Eigenvalue0,Eigenvalue1,Eigenvalue2,Classification',formats='f8,f8,f8,f8,f8,f8,u1')
                 # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_labels.T)),names='X,Y,Z,Classification',formats='f8,f8,f8,u1')
                 # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_labels.T)),names='X,Y,Z,Classification',formats='f8,f8,f8,u1')
                 write_las(sub_las_file, foo)
@@ -1593,57 +1618,3 @@ def debug_batch_and_neighbors_calib(dataset, loader):
 
     _, counts = np.unique(dataset.input_labels, return_counts=True)
     print(counts)
-
-def read_processed_las(filename):
-    p = pdal.Pipeline(json.dumps([filename]))
-    p.validate()
-    p.execute()
-    data = p.arrays[0]
-    points = np.vstack((data['X'], data['Y'], data['Z'])).T
-    # intensity = np.expand_dims(data['Intensity'], 1).astype(np.float32)
-    # intensity = np.minimum(intensity, 255.0)/255.0
-    # features = intensity
-    features = np.vstack((data['Linearity'],data['Planarity'],data['Scattering'],data['Verticality'])).T
-    # features = np.vstack((data['X'], data['Y'], data['Z'])).T
-    labels = data['Classification']
-    return points, features, labels
-
-def read_raw_las(filename):
-    p = pdal.Pipeline(json.dumps([
-        # filename
-        filename,
-        {
-            "type":"filters.covariancefeatures",
-            "knn":45
-        }
-    ]))
-    p.validate()
-    p.execute()
-    data = p.arrays[0]
-    points = np.vstack((data['X'], data['Y'], data['Z'])).T
-    # intensity = np.expand_dims(data['Intensity'], 1).astype(np.float32)
-    # intensity = np.minimum(intensity, 255.0)/255.0
-    # features = intensity
-    features = np.vstack((data['Linearity'],data['Planarity'],data['Scattering'],data['Verticality'])).T
-    # features = np.vstack((data['X'], data['Y'], data['Z'])).T
-    labels = data['Classification']
-    return points, features, labels
-
-def write_las(filename, array):
-    # merge the fields then
-    p = pdal.Pipeline(json.dumps([{
-        "type":"writers.las",
-        "filename":filename,
-        # "offset_x":"auto",
-        # "offset_y":"auto",
-        # "offset_z":"auto",
-        # "scale_x":0.01,
-        # "scale_y":0.01,
-        # "scale_z":0.01
-        "forward":"all",
-        "minor_version":4,
-        "extra_dims":"all"
-        }]), [array])
-    p.validate()
-    p.execute()
-    return True

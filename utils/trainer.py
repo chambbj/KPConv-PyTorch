@@ -35,6 +35,7 @@ import sys
 
 # PLY reader
 from utils.ply import read_ply, write_ply
+from utils.las import write_las
 
 # Metrics
 from utils.metrics import IoU_from_confusions, fast_confusion, metrics
@@ -241,10 +242,10 @@ class ModelTrainer:
 
                 # Write to tensorboard here...
                 if (self.epoch * len(training_loader) + self.step) % 9 == 0:
-                    config.writer.add_scalar('training_loss', loss.item(), (self.epoch * len(training_loader) + self.step)/config.epoch_steps)
-                    config.writer.add_scalar('training_output_loss', net.output_loss, (self.epoch * len(training_loader) + self.step)/config.epoch_steps)
-                    config.writer.add_scalar('training_reg_loss', net.reg_loss, (self.epoch * len(training_loader) + self.step)/config.epoch_steps)
-                    config.writer.add_scalar('training_acc', acc, (self.epoch * len(training_loader) + self.step)/config.epoch_steps)
+                    config.writer.add_scalar('training_loss', loss.item(), (self.epoch * len(training_loader) + self.step))
+                    config.writer.add_scalar('training_output_loss', net.output_loss, (self.epoch * len(training_loader) + self.step))
+                    config.writer.add_scalar('training_reg_loss', net.reg_loss, (self.epoch * len(training_loader) + self.step))
+                    config.writer.add_scalar('training_acc', acc, (self.epoch * len(training_loader) + self.step))
 
                 self.step += 1
 
@@ -552,8 +553,8 @@ class ModelTrainer:
             # preds = val_loader.dataset.label_values[np.argmax(probs, axis=1)]
 
             # Confusions
-            # Confs[i, :, :] = fast_confusion(truth, preds, val_loader.dataset.label_values).astype(np.int32)
-            Confs[i, :, :] = fast_confusion(truth, preds, np.array([0,1,2,3,4,5])).astype(np.int32)
+            Confs[i, :, :] = fast_confusion(truth, preds, val_loader.dataset.label_values).astype(np.int32)
+            # Confs[i, :, :] = fast_confusion(truth, preds, np.array([0,1,2,3,4,5])).astype(np.int32)
 
 
         t3 = time.time()
@@ -693,7 +694,13 @@ class ModelTrainer:
                 # Reproject preds on the evaluations points
                 preds = (sub_preds[val_loader.dataset.test_proj[i]]).astype(np.int32)
 
-                # x1 = (sub_probs[:,1][val_loader.dataset.test_proj[i]]).astype(np.float32)
+                x0 = (sub_probs[:,0][val_loader.dataset.test_proj[i]]).astype(np.float32)
+                x1 = (sub_probs[:,1][val_loader.dataset.test_proj[i]]).astype(np.float32)
+                x2 = (sub_probs[:,2][val_loader.dataset.test_proj[i]]).astype(np.float32)
+                # x3 = (sub_probs[:,3][val_loader.dataset.test_proj[i]]).astype(np.float32)
+                # x4 = (sub_probs[:,4][val_loader.dataset.test_proj[i]]).astype(np.float32)
+                # maxprobs = np.max(sub_probs, axis=1).astype(np.float32)
+                # probs = (maxprobs[val_loader.dataset.test_proj[i]]).astype(np.float32)
 
                 # Path of saved validation file
                 cloud_name = file_path.split('/')[-1]
@@ -701,9 +708,13 @@ class ModelTrainer:
 
                 # Save file
                 labels = val_loader.dataset.validation_labels[i].astype(np.int32)
-                write_ply(val_name,
-                          [points, preds, labels],
-                          ['x', 'y', 'z', 'preds', 'class'])
+                # write_ply(val_name,
+                #           [points, preds, labels],
+                #           ['x', 'y', 'z', 'preds', 'class'])
+                dimnames = 'X,Y,Z,Unlabeled,Ground,Building,Prediction,Classification'
+                dimformats = 'f8,f8,f8,f8,f8,f8,u1,u1'
+                foo = np.core.records.fromarrays(np.vstack((points.T,x0.T,x1.T,x2.T,preds.T,labels.T)),names=dimnames,formats=dimformats)
+                write_las(val_name, foo)
 
         # Display timings
         t7 = time.time()

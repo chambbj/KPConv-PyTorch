@@ -94,13 +94,13 @@ class US3DConfig(Config):
     ###################
 
     # Radius of the input sphere
-    in_radius = 20.0
+    in_radius = 50.0
 
     # Number of kernel points
     num_kernel_points = 15
 
     # Size of the first subsampling grid in meter
-    first_subsampling_dl = 0.8
+    first_subsampling_dl = 2.0
 
     # Radius of convolution in "number grid cell". (2.5 is the standard value)
     conv_radius = 2.5
@@ -119,7 +119,7 @@ class US3DConfig(Config):
 
     # Choice of input features
     first_features_dim = 128
-    in_features_dim = 5
+    in_features_dim = 4
 
     # Can the network learn modulations
     modulated = False
@@ -141,7 +141,7 @@ class US3DConfig(Config):
     #####################
 
     # Maximal number of epochs
-    max_epoch = 400
+    max_epoch = 500
 
     # Learning rate management
     learning_rate = 1e-2
@@ -159,7 +159,7 @@ class US3DConfig(Config):
     validation_size = 50
 
     # Number of epoch between each checkpoint
-    checkpoint_gap = 999999
+    checkpoint_gap = 50
 
     # Augmentations
     augment_scale_anisotropic = True
@@ -217,7 +217,7 @@ if __name__ == '__main__':
 
         # Find which snapshot to restore
         if chkp_idx is None:
-            chosen_chkp = 'current_chkp.tar'
+            chosen_chkp = 'best_miou_chkp.tar'
         else:
             chosen_chkp = np.sort(chkps)[chkp_idx]
         chosen_chkp = os.path.join('results', previous_training_path, 'checkpoints', chosen_chkp)
