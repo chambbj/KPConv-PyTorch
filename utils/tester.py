@@ -34,6 +34,7 @@ from sklearn.neighbors import KDTree
 
 # PLY reader
 from utils.ply import read_ply, write_ply
+from utils.las import write_las
 
 # Metrics
 from utils.metrics import IoU_from_confusions, fast_confusion
@@ -442,9 +443,13 @@ class ModelTester:
                         # Save plys
                         cloud_name = file_path.split('/')[-1]
                         test_name = join(test_path, 'predictions', cloud_name)
-                        write_ply(test_name,
-                                  [points, preds],
-                                  ['x', 'y', 'z', 'preds'])
+                        # write_ply(test_name,
+                                #   [points, preds],
+                                #   ['x', 'y', 'z', 'preds'])
+                        dimnames = 'X,Y,Z,Classification'
+                        dimformats = 'f8,f8,f8,u1'
+                        foo = np.core.records.fromarrays(np.vstack((points.T,preds.T)),names=dimnames,formats=dimformats)
+                        write_las(test_name, foo)
                         test_name2 = join(test_path, 'probs', cloud_name)
                         prob_names = ['_'.join(test_loader.dataset.label_to_names[label].split())
                                       for label in test_loader.dataset.label_values]

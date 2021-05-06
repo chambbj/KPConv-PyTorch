@@ -697,8 +697,8 @@ class ModelTrainer:
                 x0 = (sub_probs[:,0][val_loader.dataset.test_proj[i]]).astype(np.float32)
                 x1 = (sub_probs[:,1][val_loader.dataset.test_proj[i]]).astype(np.float32)
                 x2 = (sub_probs[:,2][val_loader.dataset.test_proj[i]]).astype(np.float32)
-                # x3 = (sub_probs[:,3][val_loader.dataset.test_proj[i]]).astype(np.float32)
-                # x4 = (sub_probs[:,4][val_loader.dataset.test_proj[i]]).astype(np.float32)
+                x3 = (sub_probs[:,3][val_loader.dataset.test_proj[i]]).astype(np.float32)
+                x4 = (sub_probs[:,4][val_loader.dataset.test_proj[i]]).astype(np.float32)
                 # maxprobs = np.max(sub_probs, axis=1).astype(np.float32)
                 # probs = (maxprobs[val_loader.dataset.test_proj[i]]).astype(np.float32)
 
@@ -711,9 +711,9 @@ class ModelTrainer:
                 # write_ply(val_name,
                 #           [points, preds, labels],
                 #           ['x', 'y', 'z', 'preds', 'class'])
-                dimnames = 'X,Y,Z,Unlabeled,Ground,Building,Prediction,Classification'
-                dimformats = 'f8,f8,f8,f8,f8,f8,u1,u1'
-                foo = np.core.records.fromarrays(np.vstack((points.T,x0.T,x1.T,x2.T,preds.T,labels.T)),names=dimnames,formats=dimformats)
+                dimnames = 'X,Y,Z,Unlabeled,Ground,Bridge,Vegetation,Building,Prediction,Classification'
+                dimformats = 'f8,f8,f8,f8,f8,f8,f8,f8,u1,u1'
+                foo = np.core.records.fromarrays(np.vstack((points.T,x0.T,x1.T,x2.T,x3.T,x4.T,preds.T,labels.T)),names=dimnames,formats=dimformats)
                 write_las(val_name, foo)
 
         # Display timings

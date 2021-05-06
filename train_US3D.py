@@ -94,13 +94,13 @@ class US3DConfig(Config):
     ###################
 
     # Radius of the input sphere
-    in_radius = 50.0
+    in_radius = 25.0
 
     # Number of kernel points
     num_kernel_points = 15
 
     # Size of the first subsampling grid in meter
-    first_subsampling_dl = 2.0
+    first_subsampling_dl = 1.0
 
     # Radius of convolution in "number grid cell". (2.5 is the standard value)
     conv_radius = 2.5
@@ -119,7 +119,7 @@ class US3DConfig(Config):
 
     # Choice of input features
     first_features_dim = 128
-    in_features_dim = 4
+    in_features_dim = 5
 
     # Can the network learn modulations
     modulated = False
@@ -141,7 +141,7 @@ class US3DConfig(Config):
     #####################
 
     # Maximal number of epochs
-    max_epoch = 500
+    max_epoch = 34
 
     # Learning rate management
     learning_rate = 1e-2

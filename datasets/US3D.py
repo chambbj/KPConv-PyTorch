@@ -42,7 +42,7 @@ from utils.mayavi_visu import *
 
 from datasets.common import grid_subsampling
 from utils.config import bcolors
-from utils.las import read_processed_las, read_raw_las, write_las
+from utils.las import read_processed_las, read_raw_las, read_subsampled_las, write_las
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -97,11 +97,11 @@ class US3DDataset(PointCloudDataset):
         self.init_labels()
 
         # List of classes ignored during training (can be empty)
-        self.ignored_labels = np.array([2,5,6])
+        self.ignored_labels = np.array([2,3])
 
         # Dataset folder
         # self.path = '/home/chambbj/data/ml-datasets/US3D/train-single-file-prototype-kpconv'
-        self.path = '/home/chambbj/data/southerniowa'
+        self.path = '/home/chambbj/data/lamoni/v3'
         # self.path = '/data/train-single-file-prototype-kpconv'
 
         # Type of task conducted on this dataset
@@ -126,7 +126,7 @@ class US3DDataset(PointCloudDataset):
         self.train_path = join(self.path, 'train')
         self.test_path = join(self.path, 'validation')
         # self.test_path = join(self.path, 'test')
-        self.test_path = join(self.path, 'predict')
+        self.test_path = join(self.path, 'predict-creston')
         # self.test_path = '/home/chambbj/data/hobu'
 
         # List of files to process
@@ -230,7 +230,7 @@ class US3DDataset(PointCloudDataset):
             self.batch_limit.share_memory_()
             np.random.seed(42)
 
-        self.config.writer = SummaryWriter('runs/southerniowa-eigs-original-classes-v1')
+        self.config.writer = SummaryWriter('runs/lamoni-v3-lpsv-poisson-1m-random')
 
         return
 
@@ -705,7 +705,7 @@ class US3DDataset(PointCloudDataset):
 
                 # Read ply file
                 #data = read_ply(file_path)
-                points, features, labels = read_raw_las(file_path)
+                # points, features, labels = read_raw_las(file_path)
                 # points = np.vstack((data['X'], data['Y'], data['Z'])).T
                 #features = np.vstack((data['red'], data['green'], data['blue'])).T
                 # intensity = np.expand_dims(data['Intensity'], 1).astype(np.float32)
@@ -720,10 +720,11 @@ class US3DDataset(PointCloudDataset):
                 # sub_points, sub_labels = grid_subsampling(points.astype('float32'),
                 #                                           labels=labels,
                 #                                           sampleDl=dl)
-                sub_points, sub_features, sub_labels = grid_subsampling(points.astype('float32'),
-                                                                        features=features.astype('float32'),
-                                                                        labels=labels,
-                                                                        sampleDl=dl)
+                # sub_points, sub_features, sub_labels = grid_subsampling(points.astype('float32'),
+                #                                                         features=features.astype('float32'),
+                #                                                         labels=labels,
+                #                                                         sampleDl=dl)
+                sub_points, sub_features, sub_labels = read_subsampled_las(file_path, dl)
 
 
                 # Rescale float color and squeeze label
@@ -745,8 +746,8 @@ class US3DDataset(PointCloudDataset):
                 #          ['x', 'y', 'z', 'red', 'green', 'blue', 'class'])
                 # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Intensity,Classification',formats='f8,f8,f8,u8,u1')
                 # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Linearity,Planarity,Scattering,Verticality,ReturnNumber,NumberOfReturns,Classification',formats='f8,f8,f8,f8,f8,f8,f8,f8,f8,u1')
-                foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Eigenvalue0,Eigenvalue1,Eigenvalue2,Classification',formats='f8,f8,f8,f8,f8,f8,u1')
-                # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_labels.T)),names='X,Y,Z,Classification',formats='f8,f8,f8,u1')
+                # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Eigenvalue0,Eigenvalue1,Eigenvalue2,Classification',formats='f8,f8,f8,f8,f8,f8,u1')
+                foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_features.T,sub_labels.T)),names='X,Y,Z,Linearity,Planarity,Scattering,Verticality,Classification',formats='f8,f8,f8,f8,f8,f8,f8,u1')
                 # foo = np.core.records.fromarrays(np.vstack((sub_points.T,sub_labels.T)),names='X,Y,Z,Classification',formats='f8,f8,f8,u1')
                 write_las(sub_las_file, foo)
 
@@ -919,7 +920,7 @@ class US3DSampler(Sampler):
                             continue
                         num_clouds_per_label[label_ind]+=1
             for label_ind, label in enumerate(self.dataset.label_values):
-                if label not in self.dataset.ignored_labels:
+                if label not in self.dataset.ignored_labels and num_clouds_per_label[label_ind] > 0:
                     random_pick_n[label_ind] = int(np.ceil(num_centers/(num_clouds_per_label[label_ind]*self.dataset.config.num_classes)))
 
             print(num_clouds_per_label)

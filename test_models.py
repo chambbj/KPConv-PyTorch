@@ -96,7 +96,7 @@ if __name__ == '__main__':
     #       > 'last_XXX': Automatically retrieve the last trained model on dataset XXX
     #       > '(old_)results/Log_YYYY-MM-DD_HH-MM-SS': Directly provide the path of a trained model
 
-    chosen_log = 'results/Log_2021-04-30_17-12-28'  # => ModelNet40
+    chosen_log = 'results/Log_2021-05-05_21-56-23'  # => ModelNet40
 
     # Choose the index of the checkpoint to load OR None if you want to load the best checkpoint
     chkp_idx = None
